@@ -115,7 +115,7 @@ export function ReportGenerator() {
               <SelectValue placeholder="Filter by site" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Sites</SelectItem>
+              <SelectItem value="all">All Sites</SelectItem>
               {siteOptions.map((siteId) => (
                 <SelectItem key={siteId} value={siteId}>
                   {siteId}
@@ -129,7 +129,7 @@ export function ReportGenerator() {
               <SelectValue placeholder="Filter by type" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Types</SelectItem>
+              <SelectItem value="all">All Types</SelectItem>
               {reportTypeOptions.map((type) => (
                 <SelectItem key={type} value={type}>
                   {type}
