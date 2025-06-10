@@ -11,10 +11,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import { useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { NotificationDropdown } from "@/components/ui/notification-dropdown";
+import { useNotifications } from "@/components/contexts/NotificationContext";
 
 interface TopBarProps {
   isSidebarOpen: boolean;
@@ -22,14 +23,30 @@ interface TopBarProps {
 }
 
 export function TopBar({ isSidebarOpen, toggleSidebar }: TopBarProps) {
-  const [sslStatus, setSslStatus] = useState<"good" | "warning" | "critical">("good");
-
+  const { unreadCount, getSslStatus, getNotificationsByType } = useNotifications();
+  const sslStatus = getSslStatus();
+  
   // Mock user data - would come from API in real application
   const user = {
     name: "Alex Johnson",
     email: "alex.johnson@example.com",
     role: "Administrator",
     avatarUrl: "https://images.pexels.com/photos/415829/pexels-photo-415829.jpeg"
+  };
+
+  // Get SSL notifications for status text
+  const sslNotifications = getNotificationsByType('ssl-expiry').filter(n => !n.isRead);
+  const criticalSslCount = sslNotifications.filter(n => n.priority === 'critical').length;
+  const warningSslCount = sslNotifications.filter(n => n.priority === 'high').length;
+
+  const getSslStatusText = () => {
+    if (criticalSslCount > 0) {
+      return `SSL Critical (${criticalSslCount})`;
+    }
+    if (warningSslCount > 0) {
+      return `SSL Expiring Soon (${warningSslCount})`;
+    }
+    return "SSL Status: Good";
   };
 
   return (
@@ -85,7 +102,7 @@ export function TopBar({ isSidebarOpen, toggleSidebar }: TopBarProps) {
           >
             <Link href="/monitoring/ssl-expiry">
               <Shield className="h-4 w-4" />
-              <span>{sslStatus === "good" ? "SSL Status: Good" : sslStatus === "warning" ? "SSL Expiring Soon" : "SSL Critical"}</span>
+              <span>{getSslStatusText()}</span>
             </Link>
           </Button>
 
@@ -95,7 +112,7 @@ export function TopBar({ isSidebarOpen, toggleSidebar }: TopBarProps) {
             className="relative"
             asChild
           >
-            <Link href="/important-sites">
+            <Link href="/important-features">
               <Star className="h-5 w-5" />
               <Badge className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-[10px]">
                 3
@@ -104,17 +121,21 @@ export function TopBar({ isSidebarOpen, toggleSidebar }: TopBarProps) {
             </Link>
           </Button>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            className="relative"
-          >
-            <Bell className="h-5 w-5" />
-            <Badge className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-[10px]">
-              5
-            </Badge>
-            <span className="sr-only">Notifications</span>
-          </Button>
+          <NotificationDropdown>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative"
+            >
+              <Bell className="h-5 w-5" />
+              {unreadCount > 0 && (
+                <Badge className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-[10px]">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Badge>
+              )}
+              <span className="sr-only">Notifications</span>
+            </Button>
+          </NotificationDropdown>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
