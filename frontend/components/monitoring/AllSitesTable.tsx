@@ -3,7 +3,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { BarChart2, ExternalLink, Star } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -45,16 +52,21 @@ const mockSites = [
   },
 ];
 
-export function AllSitesTable() {
+export function AllSitesTable({
+  showOnlyFavorites = false,
+}: {
+  showOnlyFavorites?: boolean;
+}) {
   const [searchTerm, setSearchTerm] = useState("");
   const [sites, setSites] = useState(mockSites);
 
-  const filteredSites = sites.filter(
-    (site) =>
+  const filteredSites = sites
+    .filter((site) =>
       site.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       site.url.toLowerCase().includes(searchTerm.toLowerCase()) ||
       site.id.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+    )
+    .filter((site) => !showOnlyFavorites || site.isFavorite);
 
   const toggleFavorite = (id: string) => {
     setSites(
@@ -67,7 +79,9 @@ export function AllSitesTable() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>All Monitored Sites</CardTitle>
+        <CardTitle>
+          {showOnlyFavorites ? "Important Sites" : "All Monitored Sites"}
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="mb-4">
@@ -131,11 +145,15 @@ export function AllSitesTable() {
                         )}
                       />
                       <span className="sr-only">
-                        {site.isFavorite ? "Remove from favorites" : "Add to favorites"}
+                        {site.isFavorite
+                          ? "Remove from favorites"
+                          : "Add to favorites"}
                       </span>
                     </Button>
                     <Button variant="ghost" size="icon" asChild>
-                      <Link href={`/monitoring/performance-metrics?siteId=${site.id}`}>
+                      <Link
+                        href={`/monitoring/performance-metrics?siteId=${site.id}`}
+                      >
                         <BarChart2 className="h-4 w-4" />
                         <span className="sr-only">View performance metrics</span>
                       </Link>

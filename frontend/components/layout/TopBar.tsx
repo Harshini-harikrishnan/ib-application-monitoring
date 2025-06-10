@@ -95,7 +95,7 @@ export function TopBar({ isSidebarOpen, toggleSidebar }: TopBarProps) {
             className="relative"
             asChild
           >
-            <Link href="/important-features">
+            <Link href="/important-sites">
               <Star className="h-5 w-5" />
               <Badge className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-[10px]">
                 3
