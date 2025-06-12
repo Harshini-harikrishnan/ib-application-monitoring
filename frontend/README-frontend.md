@@ -2,7 +2,6 @@
 
 This is the **frontend** codebase of the **IB Application Monitoring System**, built with **Next.js** and **TypeScript** to provide a clean, responsive, and interactive user interface for monitoring the health and performance of critical applications and services.
 
----
 
 ## 📁 Folder Overview
 
@@ -14,7 +13,6 @@ This directory contains the source code and configuration for the frontend UI. I
 - **Lib/Utils**: Helper functions and API utilities
 - **Public**: Static assets like icons, logos, etc.
 
----
 
 ## ⚙️ Tech Stack
 
@@ -25,7 +23,6 @@ This directory contains the source code and configuration for the frontend UI. I
 - **Icons**: Lucide-React
 - **UI Kit**: Shadcn/ui
 
----
 
 ## 🚀 Features
 
@@ -36,7 +33,6 @@ This directory contains the source code and configuration for the frontend UI. I
 - 📈 Graphs and charts for performance analysis
 - 🔐 Future integration with authentication & backend API
 
----
 
 ## 🧪 Getting Started
 
