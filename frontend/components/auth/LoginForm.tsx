@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { Shield, Eye, EyeOff, Mail } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { authApi } from "@/lib/api";
 
 export function LoginForm() {
   const [formData, setFormData] = useState({
@@ -30,8 +31,8 @@ export function LoginForm() {
     
     if (!formData.password) {
       newErrors.password = "Password is required";
-    } else if (formData.password.length < 6) {
-      newErrors.password = "Password must be at least 6 characters";
+    } else if (formData.password.length < 8) {
+      newErrors.password = "Password must be at least 8 characters";
     }
     
     setErrors(newErrors);
@@ -44,29 +45,28 @@ export function LoginForm() {
     if (!validateForm()) return;
     
     setIsLoading(true);
+    setErrors({});
     
     try {
-      // API call to .NET backend
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
+      const response = await authApi.login(formData);
       
-      if (response.ok) {
-        const data = await response.json();
-        // Store JWT token
-        localStorage.setItem('token', data.token);
+      if (response.success && response.token) {
+        // Store JWT token and user data
+        localStorage.setItem('authToken', response.token);
+        if (response.user) {
+          localStorage.setItem('user', JSON.stringify(response.user));
+        }
+        
         // Redirect to dashboard
         window.location.href = '/dashboard';
       } else {
-        const errorData = await response.json();
-        setErrors({ general: errorData.message || 'Login failed' });
+        setErrors({ general: response.message || 'Login failed' });
       }
     } catch (error) {
-      setErrors({ general: 'Network error. Please try again.' });
+      console.error('Login error:', error);
+      setErrors({ 
+        general: error instanceof Error ? error.message : 'Network error. Please check if the backend server is running.' 
+      });
     } finally {
       setIsLoading(false);
     }
@@ -74,7 +74,7 @@ export function LoginForm() {
 
   const handleGoogleLogin = () => {
     // Redirect to Google OAuth endpoint
-    window.location.href = '/api/auth/google';
+    window.location.href = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth/google`;
   };
 
   const handleInputChange = (field: string, value: string) => {

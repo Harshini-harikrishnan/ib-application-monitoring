@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "ruQ47yFYxAkBKax2kShYzYijd9UCRxXZFuetHrLoV/s=",
+  "Source": "BankMonitoringAPI",
+  "BasePath": "_content/BankMonitoringAPI",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}
