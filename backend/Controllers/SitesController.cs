@@ -123,7 +123,7 @@ namespace WebMonitorAPI.Controllers
                 return StatusCode(500, "Internal server error");
             }
         }
-
+        [Authorize]
         [HttpPost]
         public async Task<ActionResult<SiteDto>> CreateSite(CreateSiteDto createSiteDto)
         {
