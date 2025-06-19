@@ -66,4 +66,4 @@ WebMonitorAPI/
 - **lib/api.ts**: API service functions
 - **types/ssl.ts**: TypeScript interfaces
 
-
+Updated steps need to be added up here.
