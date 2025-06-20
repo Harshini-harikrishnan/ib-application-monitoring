@@ -21,7 +21,7 @@ builder.Services.AddIdentity<User, IdentityRole>(options =>
     options.Password.RequireUppercase = true;
     options.Password.RequiredLength = 8;
     options.User.RequireUniqueEmail = true;
-    options.SignIn.RequireConfirmedEmail = true; // For development
+    options.SignIn.RequireConfirmedEmail = false; // For development
 })
 .AddEntityFrameworkStores<ApplicationDbContext>()
 .AddDefaultTokenProviders();
@@ -62,7 +62,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Configure CORS to allow frontend connections
+// Configure CORS to allow frontend requests
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
@@ -87,9 +87,7 @@ if (app.Environment.IsDevelopment())
     app.UseDeveloperExceptionPage();
 }
 
-// Remove HTTPS redirection for development to avoid the warning
-// app.UseHttpsRedirection();
-
+// Important: CORS must be before Authentication and Authorization
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
@@ -102,6 +100,8 @@ using (var scope = app.Services.CreateScope())
     try
     {
         context.Database.EnsureCreated();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogInformation("Database ensured created successfully");
     }
     catch (Exception ex)
     {

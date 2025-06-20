@@ -215,7 +215,7 @@ namespace BankMonitoringAPI.Migrations
 
                     b.HasIndex("SiteId");
 
-                    b.ToTable("SSLCertificates");
+                    b.ToTable("SSLCertificates", (string)null);
                 });
 
             modelBuilder.Entity("WebMonitorAPI.Models.SSLCheckResult", b =>
@@ -271,7 +271,7 @@ namespace BankMonitoringAPI.Migrations
 
                     b.HasIndex("SSLCertificateId");
 
-                    b.ToTable("SSLCheckResults");
+                    b.ToTable("SSLCheckResults", (string)null);
                 });
 
             modelBuilder.Entity("WebMonitorAPI.Models.Site", b =>
@@ -324,7 +324,7 @@ namespace BankMonitoringAPI.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Sites");
+                    b.ToTable("Sites", (string)null);
                 });
 
             modelBuilder.Entity("WebMonitorAPI.Models.User", b =>

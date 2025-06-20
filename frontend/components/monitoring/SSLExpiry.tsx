@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 import { Bell, RefreshCw, AlertTriangle, CheckCircle, Clock, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { sslApi } from "@/lib/api";
 
 // Mock data for SSL certificates (temporary until backend is ready)
 const mockSSLCertificates = [
@@ -127,14 +128,28 @@ export function SSLExpiry() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [useBackendAPI, setUseBackendAPI] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Check authentication status
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('authToken');
+      setIsAuthenticated(!!token);
+    }
+  }, []);
 
   // Check if backend API is available
   const checkBackendAvailability = async () => {
     try {
+      if (!isAuthenticated) {
+        return false;
+      }
+      
       const response = await fetch('http://localhost:5000/api/ssl/summary', {
-        method: 'HEAD',
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         },
       });
       return response.ok;
@@ -146,26 +161,14 @@ export function SSLExpiry() {
   // Fetch SSL data from backend API
   const fetchSSLDataFromAPI = async () => {
     try {
-      const token = localStorage.getItem('authToken');
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
+      if (!isAuthenticated) {
+        throw new Error('Not authenticated');
       }
 
-      const [certificatesResponse, summaryResponse] = await Promise.all([
-        fetch('http://localhost:5000/api/ssl', { headers }),
-        fetch('http://localhost:5000/api/ssl/summary', { headers })
+      const [certificates, summary] = await Promise.all([
+        sslApi.getAllSSLCertificates(),
+        sslApi.getSSLSummary()
       ]);
-
-      if (!certificatesResponse.ok || !summaryResponse.ok) {
-        throw new Error('Failed to fetch SSL data from API');
-      }
-
-      const certificates = await certificatesResponse.json();
-      const summary = await summaryResponse.json();
 
       setSSLCertificates(certificates);
       setSslSummary(summary);
@@ -186,12 +189,17 @@ export function SSLExpiry() {
   // Fetch SSL data on component mount
   useEffect(() => {
     fetchSSLData();
-  }, []);
+  }, [isAuthenticated]);
 
   const fetchSSLData = async () => {
     try {
       setIsLoading(true);
       setError(null);
+      
+      if (!isAuthenticated) {
+        loadMockData();
+        return;
+      }
       
       // First check if backend is available
       const backendAvailable = await checkBackendAvailability();
@@ -214,21 +222,8 @@ export function SSLExpiry() {
     try {
       setIsRefreshing(true);
       
-      if (useBackendAPI) {
-        const token = localStorage.getItem('authToken');
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-        };
-        
-        if (token) {
-          headers.Authorization = `Bearer ${token}`;
-        }
-
-        await fetch('http://localhost:5000/api/ssl/check-all', {
-          method: 'POST',
-          headers
-        });
-        
+      if (useBackendAPI && isAuthenticated) {
+        await sslApi.checkAllSSLCertificates();
         await fetchSSLData(); // Refresh the data after checking
       } else {
         // Simulate refresh with mock data
@@ -244,20 +239,8 @@ export function SSLExpiry() {
 
   const handleSendAlerts = async () => {
     try {
-      if (useBackendAPI) {
-        const token = localStorage.getItem('authToken');
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-        };
-        
-        if (token) {
-          headers.Authorization = `Bearer ${token}`;
-        }
-
-        await fetch('http://localhost:5000/api/ssl/send-alerts', {
-          method: 'POST',
-          headers
-        });
+      if (useBackendAPI && isAuthenticated) {
+        await sslApi.sendSSLExpiryAlerts();
       } else {
         // Simulate sending alerts with mock data
         console.log('Mock: SSL alerts sent');
@@ -306,6 +289,20 @@ export function SSLExpiry() {
 
   return (
     <div className="space-y-6">
+      {/* Authentication Status */}
+      {!isAuthenticated && (
+        <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-blue-600" />
+              <p className="text-blue-800 dark:text-blue-200">
+                Please <a href="/login" className="underline font-medium">log in</a> to access real SSL certificate data from the backend API.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Backend Status Indicator */}
       {!useBackendAPI && (
         <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
@@ -313,8 +310,27 @@ export function SSLExpiry() {
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-amber-600" />
               <p className="text-amber-800 dark:text-amber-200">
-                Backend API not available. Displaying mock data for demonstration.
+                {isAuthenticated 
+                  ? "Backend API not available. Displaying mock data for demonstration."
+                  : "Displaying mock data for demonstration. Log in to access real data."
+                }
               </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {error && (
+        <Card className="border-red-200 bg-red-50 dark:bg-red-950/20">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-red-600" />
+                <p className="text-red-600">{error}</p>
+              </div>
+              <Button onClick={() => setError(null)} variant="outline" size="sm">
+                Dismiss
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -469,7 +485,9 @@ export function SSLExpiry() {
                           {cert.daysRemaining} days left
                         </Badge>
                         {cert.alertsSent && (
-                          <Bell className="h-4 w-4 text-blue-500" title="Alerts sent" />
+                          <span title="Alerts sent">
+                            <Bell className="h-4 w-4 text-blue-500" />
+                          </span>
                         )}
                       </div>
                       <p className="text-sm text-muted-foreground">

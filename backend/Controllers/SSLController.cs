@@ -53,7 +53,7 @@ namespace WebMonitorAPI.Controllers
                 
             return Ok(certificate);
         }
-
+        [Authorize]
         [HttpGet("summary")]
         public async Task<ActionResult<SSLSummaryDto>> GetSSLSummary()
         {

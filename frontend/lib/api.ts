@@ -5,11 +5,19 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/a
 
 // Helper function to get auth headers
 function getAuthHeaders(): Record<string, string> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
-  return {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(token && { Authorization: `Bearer ${token}` }),
   };
+  
+  // Only access localStorage on the client side
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+  }
+  
+  return headers;
 }
 
 // Helper function to handle API responses
@@ -24,6 +32,16 @@ async function handleApiResponse(response: Response) {
     } catch {
       // If not JSON, use the text as error message
       errorMessage = errorText || errorMessage;
+    }
+    
+    // If unauthorized, redirect to login
+    if (response.status === 401) {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('user');
+        window.location.href = '/login?message=Session expired. Please log in again.';
+      }
+      throw new Error('Authentication required. Please log in.');
     }
     
     throw new Error(errorMessage);

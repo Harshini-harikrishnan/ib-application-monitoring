@@ -35,14 +35,19 @@ namespace WebMonitorAPI.Controllers
                 var userId = _userManager.GetUserId(User);
                 if (string.IsNullOrEmpty(userId))
                 {
+                    _logger.LogWarning("GetSites called with no user ID");
                     return Unauthorized("User not found");
                 }
+                
+                _logger.LogInformation("Getting sites for user: {UserId}", userId);
                 
                 var sites = await _context.Sites
                     .Include(s => s.SSLCertificates)
                     .Where(s => s.UserId == userId)
                     .OrderBy(s => s.Name)
                     .ToListAsync();
+
+                _logger.LogInformation("Found {Count} sites for user {UserId}", sites.Count, userId);
 
                 var siteDtos = sites.Select(s => new SiteDto
                 {
@@ -71,7 +76,7 @@ namespace WebMonitorAPI.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving sites for user");
-                return StatusCode(500, "Internal server error");
+                return StatusCode(500, new { message = "Internal server error", details = ex.Message });
             }
         }
 
@@ -120,21 +125,32 @@ namespace WebMonitorAPI.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving site {SiteId}", id);
-                return StatusCode(500, "Internal server error");
+                return StatusCode(500, new { message = "Internal server error", details = ex.Message });
             }
         }
-        [Authorize]
+
         [HttpPost]
         public async Task<ActionResult<SiteDto>> CreateSite(CreateSiteDto createSiteDto)
         {
             try
             {
+                _logger.LogInformation("CreateSite called with data: {@CreateSiteDto}", createSiteDto);
+
+                if (!ModelState.IsValid)
+                {
+                    _logger.LogWarning("CreateSite called with invalid model state: {@ModelState}", ModelState);
+                    return BadRequest(ModelState);
+                }
+
                 var userId = _userManager.GetUserId(User);
                 if (string.IsNullOrEmpty(userId))
                 {
+                    _logger.LogWarning("CreateSite called with no user ID");
                     return Unauthorized("User not found");
                 }
                 
+                _logger.LogInformation("Creating site for user: {UserId}", userId);
+
                 // Generate unique site ID
                 var lastSite = await _context.Sites
                     .OrderByDescending(s => s.Id)
@@ -154,8 +170,12 @@ namespace WebMonitorAPI.Controllers
                     Status = "unknown"
                 };
 
+                _logger.LogInformation("Adding site to database: {@Site}", new { site.Name, site.Url, site.SiteId, site.UserId });
+
                 _context.Sites.Add(site);
                 await _context.SaveChangesAsync();
+
+                _logger.LogInformation("Site created successfully with ID: {SiteId}", site.Id);
 
                 var siteDto = new SiteDto
                 {
@@ -174,7 +194,7 @@ namespace WebMonitorAPI.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating site");
-                return StatusCode(500, "Internal server error");
+                return StatusCode(500, new { message = "Internal server error", details = ex.Message});
             }
         }
 
@@ -183,6 +203,13 @@ namespace WebMonitorAPI.Controllers
         {
             try
             {
+                _logger.LogInformation("UpdateSite called for ID {SiteId} with data: {@UpdateSiteDto}", id, updateSiteDto);
+
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(ModelState);
+                }
+
                 var userId = _userManager.GetUserId(User);
                 if (string.IsNullOrEmpty(userId))
                 {
@@ -201,12 +228,14 @@ namespace WebMonitorAPI.Controllers
 
                 await _context.SaveChangesAsync();
 
+                _logger.LogInformation("Site updated successfully: {SiteId}", id);
+
                 return NoContent();
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error updating site {SiteId}", id);
-                return StatusCode(500, "Internal server error");
+                return StatusCode(500, new { message = "Internal server error", details = ex.Message });
             }
         }
 
@@ -215,6 +244,8 @@ namespace WebMonitorAPI.Controllers
         {
             try
             {
+                _logger.LogInformation("DeleteSite called for ID: {SiteId}", id);
+
                 var userId = _userManager.GetUserId(User);
                 if (string.IsNullOrEmpty(userId))
                 {
@@ -232,12 +263,14 @@ namespace WebMonitorAPI.Controllers
                 _context.Sites.Remove(site);
                 await _context.SaveChangesAsync();
 
+                _logger.LogInformation("Site deleted successfully: {SiteId}", id);
+
                 return NoContent();
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error deleting site {SiteId}", id);
-                return StatusCode(500, "Internal server error");
+                return StatusCode(500, new { message = "Internal server error", details = ex.Message });
             }
         }
     }
