@@ -1,11 +1,1 @@
-{
-  "Version": 1,
-  "Hash": "ruQ47yFYxAkBKax2kShYzYijd9UCRxXZFuetHrLoV/s=",
-  "Source": "BankMonitoringAPI",
-  "BasePath": "_content/BankMonitoringAPI",
-  "Mode": "Default",
-  "ManifestType": "Build",
-  "ReferencedProjectsConfiguration": [],
-  "DiscoveryPatterns": [],
-  "Assets": []
-}
+{"Version":1,"Hash":"KBJBtF+1eToQc409T9k+XywzXzxIzUf4mjq01gc3t5A=","Source":"BankMonitoringAPI","BasePath":"_content/BankMonitoringAPI","Mode":"Default","ManifestType":"Build","ReferencedProjectsConfiguration":[],"DiscoveryPatterns":[],"Assets":[],"Endpoints":[]}

@@ -3571,24 +3571,32 @@
     ]
   },
   "packageFolders": {
-    "/home/harshini/.nuget/packages/": {}
+    "C:\\Users\\micr0\\.nuget\\packages\\": {},
+    "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "/home/harshini/Desktop/ib-application-monitoring/backend/BankMonitoringAPI.csproj",
+      "projectUniqueName": "C:\\Users\\micr0\\OneDrive\\Documents\\ib-application-monitoring\\backend\\BankMonitoringAPI.csproj",
       "projectName": "BankMonitoringAPI",
-      "projectPath": "/home/harshini/Desktop/ib-application-monitoring/backend/BankMonitoringAPI.csproj",
-      "packagesPath": "/home/harshini/.nuget/packages/",
-      "outputPath": "/home/harshini/Desktop/ib-application-monitoring/backend/obj/",
+      "projectPath": "C:\\Users\\micr0\\OneDrive\\Documents\\ib-application-monitoring\\backend\\BankMonitoringAPI.csproj",
+      "packagesPath": "C:\\Users\\micr0\\.nuget\\packages\\",
+      "outputPath": "C:\\Users\\micr0\\OneDrive\\Documents\\ib-application-monitoring\\backend\\obj\\",
       "projectStyle": "PackageReference",
+      "fallbackFolders": [
+        "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+      ],
       "configFilePaths": [
-        "/home/harshini/.nuget/NuGet/NuGet.Config"
+        "C:\\Users\\micr0\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
       ],
       "originalTargetFrameworks": [
         "net8.0"
       ],
       "sources": {
+        "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+        "C:\\Program Files\\dotnet\\library-packs": {},
         "https://api.nuget.org/v3/index.json": {}
       },
       "frameworks": {
@@ -3601,7 +3609,13 @@
         "warnAsError": [
           "NU1605"
         ]
-      }
+      },
+      "restoreAuditProperties": {
+        "enableAudit": "true",
+        "auditLevel": "low",
+        "auditMode": "direct"
+      },
+      "SdkAnalysisLevel": "9.0.300"
     },
     "frameworks": {
       "net8.0": {
@@ -3680,7 +3694,7 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "/usr/lib/dotnet/sdk/8.0.117/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.300/PortableRuntimeIdentifierGraph.json"
       }
     }
   }
