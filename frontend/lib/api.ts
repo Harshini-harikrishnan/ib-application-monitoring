@@ -1,15 +1,10 @@
-// API service functions for SSL monitoring
-
-// Use HTTP for local development to avoid SSL certificate issues
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
-// Helper function to get auth headers
 function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
   
-  // Only access localStorage on the client side
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('authToken');
     if (token) {
@@ -34,7 +29,6 @@ async function handleApiResponse(response: Response) {
       errorMessage = errorText || errorMessage;
     }
     
-    // If unauthorized, redirect to login
     if (response.status === 401) {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('authToken');
@@ -55,13 +49,18 @@ async function handleApiResponse(response: Response) {
   return response.text();
 }
 
-// Sites API
 export const sitesApi = {
   async getAllSites() {
     try {
+      console.log('Fetching sites from:', `${API_BASE_URL}/sites`);
+      console.log('Auth headers:', getAuthHeaders());
+      
       const response = await fetch(`${API_BASE_URL}/sites`, {
+        method: 'GET',
         headers: getAuthHeaders(),
       });
+      
+      console.log('Sites response status:', response.status);
       return await handleApiResponse(response);
     } catch (error) {
       console.error('Error in getAllSites:', error);
@@ -72,6 +71,7 @@ export const sitesApi = {
   async getSite(id: number) {
     try {
       const response = await fetch(`${API_BASE_URL}/sites/${id}`, {
+        method: 'GET',
         headers: getAuthHeaders(),
       });
       return await handleApiResponse(response);
@@ -83,49 +83,64 @@ export const sitesApi = {
 
   async createSite(siteData: { name: string; url: string }) {
     try {
+      console.log('Creating site with data:', siteData);
+      console.log('API URL:', `${API_BASE_URL}/sites`);
+      console.log('Headers:', getAuthHeaders());
+      
       const response = await fetch(`${API_BASE_URL}/sites`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(siteData),
       });
+      
+      console.log('Create site response status:', response.status);
+      console.log('Create site response headers:', Object.fromEntries(response.headers.entries()));
+      
       return await handleApiResponse(response);
     } catch (error) {
       console.error('Error in createSite:', error);
-      throw new Error('Failed to create site');
+      throw error;
     }
   },
 
   async updateSite(id: number, siteData: { name: string; url: string; isActive: boolean }) {
     try {
+      console.log('Updating site with data:', siteData);
+      
       const response = await fetch(`${API_BASE_URL}/sites/${id}`, {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify(siteData),
       });
+      
+      console.log('Update site response status:', response.status);
       await handleApiResponse(response);
       return true;
     } catch (error) {
       console.error('Error in updateSite:', error);
-      throw new Error('Failed to update site');
+      throw error;
     }
   },
 
   async deleteSite(id: number) {
     try {
+      console.log('Deleting site with id:', id);
+      
       const response = await fetch(`${API_BASE_URL}/sites/${id}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });
+      
+      console.log('Delete site response status:', response.status);
       await handleApiResponse(response);
       return true;
     } catch (error) {
       console.error('Error in deleteSite:', error);
-      throw new Error('Failed to delete site');
+      throw error;
     }
   },
 };
 
-// SSL API
 export const sslApi = {
   async getAllSSLCertificates() {
     try {
@@ -166,6 +181,7 @@ export const sslApi = {
   async getSSLSummary() {
     try {
       const response = await fetch(`${API_BASE_URL}/ssl/summary`, {
+        method: 'GET',
         headers: getAuthHeaders(),
       });
       return await handleApiResponse(response);
@@ -177,11 +193,13 @@ export const sslApi = {
 
   async checkSSLCertificate(siteId: number) {
     try {
+      console.log('Checking SSL certificate for site:', siteId);
       const response = await fetch(`${API_BASE_URL}/ssl/check`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({ siteId }),
       });
+      console.log('SSL check response status:', response.status);
       return await handleApiResponse(response);
     } catch (error) {
       console.error('Error in checkSSLCertificate:', error);
@@ -230,7 +248,6 @@ export const sslApi = {
   },
 };
 
-// Auth API
 export const authApi = {
   async login(credentials: { email: string; password: string }) {
     try {
@@ -279,4 +296,59 @@ export const authApi = {
       throw error;
     }
   },
+};
+
+export const performanceApi = {
+  async getPerformanceMetrics(siteId: number) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/performance/${siteId}`, {
+        headers: getAuthHeaders(),
+      });
+      return await handleApiResponse(response);
+    } catch (error) {
+      console.error('Error in getPerformanceMetrics:', error);
+      throw new Error('Failed to fetch performance metrics. Please ensure the site exists and try again.');
+    }
+  },
+
+  async runLighthouseAudit(siteId: number) {
+    try {
+      console.log('Running Lighthouse audit for site:', siteId);
+      const response = await fetch(`${API_BASE_URL}/performance/lighthouse/${siteId}`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      console.log('Lighthouse audit response status:', response.status);
+      const data = await handleApiResponse(response);
+      return data.results; // Extract results from { success, message, results }
+    } catch (error) {
+      console.error('Error in runLighthouseAudit:', error);
+      throw new Error('Failed to run Lighthouse audit. Please check the site URL and try again.');
+    }
+  },
+
+  async downloadLighthouseReport(siteId: number) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/performance/lighthouse/report/${siteId}`, {
+        headers: getAuthHeaders(),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to download report: ${response.statusText}`);
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `lighthouse-report-${siteId}.html`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error in downloadLighthouseReport:', error);
+      throw new Error('Failed to download Lighthouse report');
+    }
+  } 
 };

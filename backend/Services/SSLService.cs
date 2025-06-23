@@ -22,39 +22,64 @@ namespace WebMonitorAPI.Services
 
             try
             {
-                // Remove protocol if present
-                domain = domain.Replace("https://", "").Replace("http://", "");
-                
-                // Remove path if present
-                if (domain.Contains("/"))
-                {
-                    domain = domain.Split('/')[0];
-                }
+                _logger.LogInformation("Starting SSL check for domain: {Domain}", domain);
+
+                // Clean the domain - remove protocol and path
+                domain = CleanDomain(domain);
+                _logger.LogInformation("Cleaned domain: {Domain}", domain);
 
                 using var tcpClient = new TcpClient();
-                await tcpClient.ConnectAsync(domain, 443);
+                
+                // Set timeout for connection
+                var connectTask = tcpClient.ConnectAsync(domain, 443);
+                var timeoutTask = Task.Delay(10000); // 10 second timeout
+                
+                var completedTask = await Task.WhenAny(connectTask, timeoutTask);
+                if (completedTask == timeoutTask)
+                {
+                    throw new TimeoutException($"Connection to {domain}:443 timed out");
+                }
+
+                if (!tcpClient.Connected)
+                {
+                    throw new Exception($"Failed to connect to {domain}:443");
+                }
+
+                _logger.LogInformation("TCP connection established to {Domain}:443", domain);
 
                 using var sslStream = new SslStream(tcpClient.GetStream(), false, ValidateServerCertificate);
+                
+                // Authenticate as client
                 await sslStream.AuthenticateAsClientAsync(domain);
+                _logger.LogInformation("SSL handshake completed for {Domain}", domain);
 
                 var certificate = sslStream.RemoteCertificate as X509Certificate2;
                 
                 if (certificate != null)
                 {
+                    _logger.LogInformation("Certificate found for {Domain}", domain);
+                    _logger.LogInformation("Certificate Subject: {Subject}", certificate.Subject);
+                    _logger.LogInformation("Certificate Issuer: {Issuer}", certificate.Issuer);
+                    _logger.LogInformation("Certificate Valid From: {NotBefore}", certificate.NotBefore);
+                    _logger.LogInformation("Certificate Valid To: {NotAfter}", certificate.NotAfter);
+
                     result.IsValid = true;
                     result.CertExpiryDate = certificate.NotAfter;
                     result.CertIssueDate = certificate.NotBefore;
-                    result.CertIssuer = certificate.Issuer;
-                    result.CertSubject = certificate.Subject;
+                    result.CertIssuer = ExtractOrganizationFromDN(certificate.Issuer);
+                    result.CertSubject = ExtractOrganizationFromDN(certificate.Subject);
                     
                     var daysRemaining = (certificate.NotAfter - DateTime.Now).Days;
                     result.DaysRemaining = Math.Max(0, daysRemaining);
                     
                     // Determine status based on days remaining
                     result.Status = GetSSLStatus(result.DaysRemaining);
+                    
+                    _logger.LogInformation("SSL certificate for {Domain} expires in {Days} days", domain, result.DaysRemaining);
                 }
                 else
                 {
+                    _logger.LogWarning("No certificate found for {Domain}", domain);
                     result.IsValid = false;
                     result.Status = "invalid";
                     result.ErrorMessage = "No certificate found";
@@ -71,6 +96,7 @@ namespace WebMonitorAPI.Services
             {
                 stopwatch.Stop();
                 result.ResponseTimeMs = (int)stopwatch.ElapsedMilliseconds;
+                _logger.LogInformation("SSL check completed for {Domain} in {ResponseTime}ms", domain, result.ResponseTimeMs);
             }
 
             return result;
@@ -104,6 +130,11 @@ namespace WebMonitorAPI.Services
         private bool ValidateServerCertificate(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
         {
             // For monitoring purposes, we want to accept even invalid certificates to check their expiry
+            // We'll log the policy errors but still return true to get certificate information
+            if (sslPolicyErrors != SslPolicyErrors.None)
+            {
+                _logger.LogWarning("SSL Policy Errors detected: {Errors}", sslPolicyErrors);
+            }
             return true;
         }
 
@@ -116,6 +147,71 @@ namespace WebMonitorAPI.Services
                 <= 30 => "expiring",
                 _ => "valid"
             };
+        }
+
+        private string CleanDomain(string url)
+        {
+            try
+            {
+                // Remove protocol if present
+                url = url.Replace("https://", "").Replace("http://", "");
+                
+                // Remove www. prefix if present
+                if (url.StartsWith("www."))
+                {
+                    url = url.Substring(4);
+                }
+                
+                // Remove path if present
+                if (url.Contains("/"))
+                {
+                    url = url.Split('/')[0];
+                }
+                
+                // Remove port if present
+                if (url.Contains(":"))
+                {
+                    url = url.Split(':')[0];
+                }
+                
+                return url.Trim();
+            }
+            catch
+            {
+                return url;
+            }
+        }
+
+        private string ExtractOrganizationFromDN(string distinguishedName)
+        {
+            try
+            {
+                // Parse the distinguished name to extract organization
+                var parts = distinguishedName.Split(',');
+                
+                foreach (var part in parts)
+                {
+                    var trimmedPart = part.Trim();
+                    if (trimmedPart.StartsWith("O="))
+                    {
+                        return trimmedPart.Substring(2);
+                    }
+                    else if (trimmedPart.StartsWith("CN="))
+                    {
+                        // If no organization found, use common name
+                        var cn = trimmedPart.Substring(3);
+                        // Clean up common name (remove wildcards, etc.)
+                        return cn.Replace("*.", "").Split('.')[0];
+                    }
+                }
+                
+                // If nothing found, return the first part
+                return parts.Length > 0 ? parts[0].Trim() : distinguishedName;
+            }
+            catch
+            {
+                return distinguishedName;
+            }
         }
     }
 }

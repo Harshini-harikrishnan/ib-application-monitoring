@@ -9,8 +9,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2, ExternalLink, RefreshCw, Shield, AlertTriangle } from "lucide-react";
+import { Plus, Edit, Trash2, ExternalLink, RefreshCw, Shield, AlertTriangle, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { sitesApi, sslApi } from "@/lib/api";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 // Mock data for sites (temporary until backend is ready)
 const mockSites = [
@@ -99,6 +102,7 @@ interface SiteFormData {
 }
 
 export function ManageSites() {
+  const router = useRouter();
   const [sites, setSites] = useState<Site[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -109,57 +113,96 @@ export function ManageSites() {
   const [error, setError] = useState<string | null>(null);
   const [checkingSSL, setCheckingSSL] = useState<number | null>(null);
   const [useBackendAPI, setUseBackendAPI] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Check if user is authenticated
+  const isAuthenticated = () => {
+    if (typeof window === 'undefined') return false;
+    const token = localStorage.getItem('authToken');
+    return !!token;
+  };
+
+  // Check if backend API is available
+  const checkBackendAvailability = async () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        console.log('No auth token found');
+        return false;
+      }
+
+      const response = await fetch('http://localhost:5000/api/sites', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      
+      console.log('Backend availability check:', response.status);
+      return response.status !== 404; // Even if unauthorized, if we get a response, backend is available
+    } catch (error) {
+      console.log('Backend not available:', error);
+      return false;
+    }
+  };
+
+  // Fetch sites from backend API
+  const fetchSitesFromAPI = async () => {
+    try {
+      if (!isAuthenticated()) {
+        throw new Error('Not authenticated');
+      }
+
+      const sitesData = await sitesApi.getAllSites();
+      setSites(sitesData);
+      setUseBackendAPI(true);
+      console.log('Successfully fetched sites from API:', sitesData);
+    } catch (err) {
+      console.warn('Backend API not available or error occurred:', err);
+      throw err;
+    }
+  };
 
   // Load mock data
   const loadMockData = () => {
     setSites(mockSites);
     setUseBackendAPI(false);
-  };
-
-  // Fetch sites from backend API
-  const fetchSites = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      const token = localStorage.getItem('authToken');
-      console.log('Auth Token:', token); // Debug token
-      if (!token) {
-        throw new Error('No authentication token found. Please log in.');
-      }
-
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      };
-
-      const response = await fetch('http://localhost:5000/api/sites', { headers });
-      
-      if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error('Unauthorized: Invalid or expired token. Please log in again.');
-        }
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Network response was not ok: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('Sites:', data);
-      setSites(data);
-      setUseBackendAPI(true);
-    } catch (error) {
-      console.error('Error fetching sites, loading mock data:', error);
-      setError(error instanceof Error ? error.message : 'Failed to fetch sites');
-      loadMockData();
-    } finally {
-      setIsLoading(false);
-    }
+    console.log('Using mock data for sites');
   };
 
   // Fetch sites on component mount
   useEffect(() => {
     fetchSites();
   }, []);
+
+  const fetchSites = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      if (!isAuthenticated()) {
+        setError('Please log in to manage sites');
+        loadMockData();
+        return;
+      }
+      
+      // First check if backend is available
+      const backendAvailable = await checkBackendAvailability();
+      
+      if (backendAvailable) {
+        await fetchSitesFromAPI();
+      } else {
+        loadMockData();
+      }
+    } catch (err) {
+      // Fallback to mock data if API fails
+      loadMockData();
+      console.log('Using mock data for sites due to error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const validateForm = (data: SiteFormData): boolean => {
     const errors: Partial<SiteFormData> = {};
@@ -172,7 +215,8 @@ export function ManageSites() {
       errors.url = "Site URL is required";
     } else {
       try {
-        new URL(data.url.startsWith('http') ? data.url : `https://${data.url}`);
+        const urlToValidate = data.url.startsWith('http') ? data.url : `https://${data.url}`;
+        new URL(urlToValidate);
       } catch {
         errors.url = "Please enter a valid URL";
       }
@@ -185,37 +229,35 @@ export function ManageSites() {
   const handleAddSite = async () => {
     if (!validateForm(formData)) return;
 
+    if (!isAuthenticated()) {
+      setError('Please log in to add sites');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+
     try {
+      // Ensure URL has protocol
+      const urlToSubmit = formData.url.startsWith('http') ? formData.url : `https://${formData.url}`;
+      const siteDataToSubmit = {
+        ...formData,
+        url: urlToSubmit
+      };
+
       if (useBackendAPI) {
-        const token = localStorage.getItem('authToken');
-        if (!token) {
-          throw new Error('No authentication token found. Please log in.');
-        }
-
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        };
-
-        const response = await fetch('http://localhost:5000/api/sites', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(formData),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || 'Failed to create site');
-        }
+        console.log('Attempting to create site via API...');
+        const newSite = await sitesApi.createSite(siteDataToSubmit);
+        console.log('Site created successfully:', newSite);
         
-        const newSite = await response.json();
-        setSites([...sites, newSite]);
+        // Refresh the sites list
+        await fetchSites();
       } else {
         // Mock site creation
         const newSite: Site = {
-          id: Math.max(...sites.map(s => s.id), 0) + 1,
+          id: Math.max(...sites.map(s => s.id)) + 1,
           name: formData.name,
-          url: formData.url,
+          url: urlToSubmit,
           siteId: `site_${String(sites.length + 1).padStart(3, '0')}`,
           isActive: true,
           createdDate: new Date().toISOString(),
@@ -228,45 +270,41 @@ export function ManageSites() {
       setFormErrors({});
       setIsAddDialogOpen(false);
     } catch (err) {
+      console.error('Error adding site:', err);
       setError(err instanceof Error ? err.message : 'Failed to add site');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleEditSite = async () => {
     if (!editingSite || !validateForm(formData)) return;
 
+    if (!isAuthenticated()) {
+      setError('Please log in to edit sites');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+
     try {
+      // Ensure URL has protocol
+      const urlToSubmit = formData.url.startsWith('http') ? formData.url : `https://${formData.url}`;
+      const siteDataToSubmit = {
+        name: formData.name,
+        url: urlToSubmit,
+        isActive: editingSite.isActive
+      };
+
       if (useBackendAPI) {
-        const token = localStorage.getItem('authToken');
-        if (!token) {
-          throw new Error('No authentication token found. Please log in.');
-        }
-
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        };
-
-        const response = await fetch(`http://localhost:5000/api/sites/${editingSite.id}`, {
-          method: 'PUT',
-          headers,
-          body: JSON.stringify({
-            ...formData,
-            isActive: editingSite.isActive
-          }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || 'Failed to update site');
-        }
-
-        const updatedSite = await response.json();
-        setSites(sites.map(site => site.id === editingSite.id ? updatedSite : site));
+        await sitesApi.updateSite(editingSite.id, siteDataToSubmit);
+        // Refresh the sites list
+        await fetchSites();
       } else {
         const updatedSites = sites.map(site =>
           site.id === editingSite.id
-            ? { ...site, name: formData.name, url: formData.url }
+            ? { ...site, name: formData.name, url: urlToSubmit }
             : site
         );
         setSites(updatedSites);
@@ -277,36 +315,29 @@ export function ManageSites() {
       setEditingSite(null);
       setIsEditDialogOpen(false);
     } catch (err) {
+      console.error('Error updating site:', err);
       setError(err instanceof Error ? err.message : 'Failed to update site');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleDeleteSite = async (siteId: number) => {
+    if (!isAuthenticated()) {
+      setError('Please log in to delete sites');
+      return;
+    }
+
     try {
       if (useBackendAPI) {
-        const token = localStorage.getItem('authToken');
-        if (!token) {
-          throw new Error('No authentication token found. Please log in.');
-        }
-
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        };
-
-        const response = await fetch(`http://localhost:5000/api/sites/${siteId}`, {
-          method: 'DELETE',
-          headers,
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || 'Failed to delete site');
-        }
+        await sitesApi.deleteSite(siteId);
+        // Refresh the sites list
+        await fetchSites();
+      } else {
+        setSites(sites.filter(site => site.id !== siteId));
       }
-      
-      setSites(sites.filter(site => site.id !== siteId));
     } catch (err) {
+      console.error('Error deleting site:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete site');
     }
   };
@@ -316,39 +347,33 @@ export function ManageSites() {
       setCheckingSSL(siteId);
       
       if (useBackendAPI) {
-        const token = localStorage.getItem('authToken');
-        if (!token) {
-          throw new Error('No authentication token found. Please log in.');
-        }
-
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        };
-
-        const response = await fetch('http://localhost:5000/api/ssl/check', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ siteId }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || 'Failed to check SSL certificate');
-        }
+        console.log('Checking SSL for site:', siteId);
+        await sslApi.checkSSLCertificate(siteId);
         
         // Refresh sites data to get updated SSL info
         await fetchSites();
+        
+        // Navigate to SSL expiry page with the specific site
+        router.push(`/monitoring/ssl-expiry?siteId=${siteId}`);
       } else {
         // Simulate SSL check with mock data
         await new Promise(resolve => setTimeout(resolve, 2000));
         console.log('Mock: SSL check completed for site', siteId);
+        
+        // Navigate to SSL expiry page
+        router.push(`/monitoring/ssl-expiry?siteId=${siteId}`);
       }
     } catch (err) {
+      console.error('SSL check error:', err);
       setError(err instanceof Error ? err.message : 'Failed to check SSL certificate');
     } finally {
       setCheckingSSL(null);
     }
+  };
+
+  const handleViewPerformance = (siteId: number) => {
+    // Navigate to performance metrics page for the specific site
+    router.push(`/monitoring/performance-metrics?siteId=${siteId}`);
   };
 
   const openEditDialog = (site: Site) => {
@@ -379,6 +404,20 @@ export function ManageSites() {
 
   return (
     <div className="space-y-6">
+      {/* Authentication Warning */}
+      {!isAuthenticated() && (
+        <Card className="border-red-200 bg-red-50 dark:bg-red-950/20">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-600" />
+              <p className="text-red-800 dark:text-red-200">
+                You are not logged in. Please log in to manage sites.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Backend Status Indicator */}
       {!useBackendAPI && (
         <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
@@ -396,10 +435,12 @@ export function ManageSites() {
       {error && (
         <Card className="border-red-200 bg-red-50">
           <CardContent className="pt-6">
-            <p className="text-red-600">{error}</p>
-            <Button onClick={() => setError(null)} variant="outline" size="sm" className="mt-2">
-              Dismiss
-            </Button>
+            <div className="flex items-center justify-between">
+              <p className="text-red-600">{error}</p>
+              <Button onClick={() => setError(null)} variant="outline" size="sm">
+                Dismiss
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -416,7 +457,7 @@ export function ManageSites() {
             </div>
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
               <DialogTrigger asChild>
-                <Button onClick={openAddDialog}>
+                <Button onClick={openAddDialog} disabled={!isAuthenticated()}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add Site
                 </Button>
@@ -437,6 +478,7 @@ export function ManageSites() {
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       className={cn(formErrors.name && "border-red-500")}
+                      disabled={isSubmitting}
                     />
                     {formErrors.name && (
                       <p className="text-sm text-red-500">{formErrors.name}</p>
@@ -446,21 +488,38 @@ export function ManageSites() {
                     <Label htmlFor="site-url">Site URL</Label>
                     <Input
                       id="site-url"
-                      placeholder="https://example.com"
+                      placeholder="https://example.com or example.com"
                       value={formData.url}
                       onChange={(e) => setFormData({ ...formData, url: e.target.value })}
                       className={cn(formErrors.url && "border-red-500")}
+                      disabled={isSubmitting}
                     />
                     {formErrors.url && (
                       <p className="text-sm text-red-500">{formErrors.url}</p>
                     )}
+                    <p className="text-xs text-muted-foreground">
+                      Protocol (https://) will be added automatically if not provided
+                    </p>
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setIsAddDialogOpen(false)}
+                    disabled={isSubmitting}
+                  >
                     Cancel
                   </Button>
-                  <Button onClick={handleAddSite}>Add Site</Button>
+                  <Button onClick={handleAddSite} disabled={isSubmitting}>
+                    {isSubmitting ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        Adding...
+                      </>
+                    ) : (
+                      'Add Site'
+                    )}
+                  </Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
@@ -552,12 +611,23 @@ export function ManageSites() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
+                      {/* Performance Metrics Button */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleViewPerformance(site.id)}
+                        disabled={!isAuthenticated()}
+                        title="View Performance Metrics"
+                      >
+                        <BarChart3 className="h-4 w-4" />
+                      </Button>
+
                       {/* SSL Check Button */}
                       <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => handleCheckSSL(site.id)}
-                        disabled={checkingSSL === site.id}
+                        disabled={checkingSSL === site.id || !isAuthenticated()}
                         title="Check SSL Certificate"
                       >
                         {checkingSSL === site.id ? (
@@ -574,6 +644,7 @@ export function ManageSites() {
                             variant="ghost"
                             size="icon"
                             onClick={() => openEditDialog(site)}
+                            disabled={!isAuthenticated()}
                           >
                             <Edit className="h-4 w-4" />
                             <span className="sr-only">Edit site</span>
@@ -595,6 +666,7 @@ export function ManageSites() {
                                 value={formData.name}
                                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                 className={cn(formErrors.name && "border-red-500")}
+                                disabled={isSubmitting}
                               />
                               {formErrors.name && (
                                 <p className="text-sm text-red-500">{formErrors.name}</p>
@@ -608,6 +680,7 @@ export function ManageSites() {
                                 value={formData.url}
                                 onChange={(e) => setFormData({ ...formData, url: e.target.value })}
                                 className={cn(formErrors.url && "border-red-500")}
+                                disabled={isSubmitting}
                               />
                               {formErrors.url && (
                                 <p className="text-sm text-red-500">{formErrors.url}</p>
@@ -615,10 +688,23 @@ export function ManageSites() {
                             </div>
                           </div>
                           <DialogFooter>
-                            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                            <Button 
+                              variant="outline" 
+                              onClick={() => setIsEditDialogOpen(false)}
+                              disabled={isSubmitting}
+                            >
                               Cancel
                             </Button>
-                            <Button onClick={handleEditSite}>Save Changes</Button>
+                            <Button onClick={handleEditSite} disabled={isSubmitting}>
+                              {isSubmitting ? (
+                                <>
+                                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                  Saving...
+                                </>
+                              ) : (
+                                'Save Changes'
+                              )}
+                            </Button>
                           </DialogFooter>
                         </DialogContent>
                       </Dialog>
@@ -626,7 +712,11 @@ export function ManageSites() {
                       {/* Delete Button */}
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon">
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            disabled={!isAuthenticated()}
+                          >
                             <Trash2 className="h-4 w-4" />
                             <span className="sr-only">Delete site</span>
                           </Button>

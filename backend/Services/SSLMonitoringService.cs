@@ -60,18 +60,29 @@ namespace WebMonitorAPI.Services
         {
             try
             {
+                _logger.LogInformation("Starting SSL certificate update for site {SiteId}, user {UserId}", siteId, userId);
+
                 var site = await _context.Sites
                     .Include(s => s.SSLCertificates)
                     .FirstOrDefaultAsync(s => s.Id == siteId && s.UserId == userId);
 
-                if (site == null) return false;
+                if (site == null)
+                {
+                    _logger.LogWarning("Site not found: {SiteId} for user {UserId}", siteId, userId);
+                    return false;
+                }
+
+                _logger.LogInformation("Found site: {SiteName} ({SiteUrl})", site.Name, site.Url);
 
                 var checkResult = await _sslService.CheckSSLCertificateAsync(site);
+                _logger.LogInformation("SSL check result for {SiteUrl}: Valid={IsValid}, Status={Status}, Days={Days}", 
+                    site.Url, checkResult.IsValid, checkResult.Status, checkResult.DaysRemaining);
 
                 // Update or create SSL certificate record
                 var sslCert = site.SSLCertificates.FirstOrDefault();
                 if (sslCert == null)
                 {
+                    _logger.LogInformation("Creating new SSL certificate record for site {SiteId}", siteId);
                     sslCert = new SSLCertificate
                     {
                         Domain = ExtractDomain(site.Url),
@@ -79,6 +90,10 @@ namespace WebMonitorAPI.Services
                         SiteId = site.Id
                     };
                     _context.SSLCertificates.Add(sslCert);
+                }
+                else
+                {
+                    _logger.LogInformation("Updating existing SSL certificate record {SSLId}", sslCert.SSLId);
                 }
 
                 // Update SSL certificate with check result
@@ -100,13 +115,27 @@ namespace WebMonitorAPI.Services
                     CertSubject = checkResult.CertSubject
                 };
 
-                _context.SSLCheckResults.Add(checkResultEntity);
+                // Only add to context if SSL certificate already has an ID (saved to database)
+                if (sslCert.Id > 0)
+                {
+                    _context.SSLCheckResults.Add(checkResultEntity);
+                }
 
                 // Update site status
                 site.LastChecked = DateTime.UtcNow;
                 site.Status = checkResult.IsValid ? "up" : "down";
 
                 await _context.SaveChangesAsync();
+                
+                // If SSL certificate was just created, add the check result now
+                if (checkResultEntity.SSLCertificateId == 0)
+                {
+                    checkResultEntity.SSLCertificateId = sslCert.Id;
+                    _context.SSLCheckResults.Add(checkResultEntity);
+                    await _context.SaveChangesAsync();
+                }
+
+                _logger.LogInformation("SSL certificate update completed successfully for site {SiteId}", siteId);
                 return true;
             }
             catch (Exception ex)
@@ -124,8 +153,13 @@ namespace WebMonitorAPI.Services
                     .Where(s => s.UserId == userId && s.IsActive)
                     .ToListAsync();
 
+                _logger.LogInformation("Updating SSL certificates for {Count} sites for user {UserId}", sites.Count, userId);
+
                 var tasks = sites.Select(site => UpdateSSLCertificateAsync(site.Id, userId));
                 var results = await Task.WhenAll(tasks);
+
+                var successCount = results.Count(r => r);
+                _logger.LogInformation("SSL update completed: {Success}/{Total} sites successful", successCount, sites.Count);
 
                 return results.All(r => r);
             }
@@ -159,6 +193,7 @@ namespace WebMonitorAPI.Services
             {
                 var expiringCerts = await _context.SSLCertificates
                     .Include(s => s.Site)
+                    .ThenInclude(s => s.User)
                     .Where(s => s.DaysRemaining <= 30 && s.DaysRemaining > 0)
                     .ToListAsync();
 
@@ -167,13 +202,8 @@ namespace WebMonitorAPI.Services
                     // Check if alert was already sent today
                     if (cert.LastAlertSent?.Date == DateTime.Today) continue;
 
-                    // You may need to fetch the user email by joining with the Users table if needed.
-                    // For now, this assumes you have access to the user's email another way.
-                    // Example: If Site has a UserId, fetch the user from the context.
-                    var user = await _context.Users.FindAsync(cert.Site.UserId);
-
                     await _emailService.SendSSLExpiryAlertAsync(
-                        user?.Email,
+                        cert.Site.User.Email,
                         cert.Domain,
                         cert.DaysRemaining,
                         cert.ExpiryDate ?? DateTime.MinValue);

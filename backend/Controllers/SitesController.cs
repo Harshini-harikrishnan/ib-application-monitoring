@@ -43,6 +43,7 @@ namespace WebMonitorAPI.Controllers
                 
                 var sites = await _context.Sites
                     .Include(s => s.SSLCertificates)
+                    .Include(s => s.PerformanceMetrics)
                     .Where(s => s.UserId == userId)
                     .OrderBy(s => s.Name)
                     .ToListAsync();
@@ -59,6 +60,8 @@ namespace WebMonitorAPI.Controllers
                     CreatedDate = s.CreatedDate,
                     LastChecked = s.LastChecked,
                     Status = s.Status,
+                    LastPerformanceScore = s.LastPerformanceScore,
+                    LastPerformanceAudit = s.LastPerformanceAudit,
                     SSLCertificate = s.SSLCertificates?.FirstOrDefault() != null ? new SSLCertificateDto
                     {
                         Id = s.SSLCertificates.First().Id,
@@ -68,6 +71,17 @@ namespace WebMonitorAPI.Controllers
                         Status = s.SSLCertificates.First().Status,
                         DaysRemaining = s.SSLCertificates.First().DaysRemaining,
                         LastChecked = s.SSLCertificates.First().LastChecked
+                    } : null,
+                    LatestPerformanceMetrics = s.PerformanceMetrics?.OrderByDescending(m => m.AuditDate).FirstOrDefault() != null ? new PerformanceMetricsDto
+                    {
+                        Id = s.PerformanceMetrics.OrderByDescending(m => m.AuditDate).First().Id,
+                        PerformanceScore = s.PerformanceMetrics.OrderByDescending(m => m.AuditDate).First().PerformanceScore,
+                        AccessibilityScore = s.PerformanceMetrics.OrderByDescending(m => m.AuditDate).First().AccessibilityScore,
+                        BestPracticesScore = s.PerformanceMetrics.OrderByDescending(m => m.AuditDate).First().BestPracticesScore,
+                        SeoScore = s.PerformanceMetrics.OrderByDescending(m => m.AuditDate).First().SeoScore,
+                        PwaScore = s.PerformanceMetrics.OrderByDescending(m => m.AuditDate).First().PwaScore,
+                        AuditDate = s.PerformanceMetrics.OrderByDescending(m => m.AuditDate).First().AuditDate,
+                        ReportUrl = s.PerformanceMetrics.OrderByDescending(m => m.AuditDate).First().ReportUrl
                     } : null
                 }).ToList();
 
@@ -93,6 +107,7 @@ namespace WebMonitorAPI.Controllers
                 
                 var site = await _context.Sites
                     .Include(s => s.SSLCertificates)
+                    .Include(s => s.PerformanceMetrics)
                     .FirstOrDefaultAsync(s => s.Id == id && s.UserId == userId);
 
                 if (site == null)
@@ -108,6 +123,8 @@ namespace WebMonitorAPI.Controllers
                     CreatedDate = site.CreatedDate,
                     LastChecked = site.LastChecked,
                     Status = site.Status,
+                    LastPerformanceScore = site.LastPerformanceScore,
+                    LastPerformanceAudit = site.LastPerformanceAudit,
                     SSLCertificate = site.SSLCertificates?.FirstOrDefault() != null ? new SSLCertificateDto
                     {
                         Id = site.SSLCertificates.First().Id,
@@ -117,6 +134,17 @@ namespace WebMonitorAPI.Controllers
                         Status = site.SSLCertificates.First().Status,
                         DaysRemaining = site.SSLCertificates.First().DaysRemaining,
                         LastChecked = site.SSLCertificates.First().LastChecked
+                    } : null,
+                    LatestPerformanceMetrics = site.PerformanceMetrics?.OrderByDescending(m => m.AuditDate).FirstOrDefault() != null ? new PerformanceMetricsDto
+                    {
+                        Id = site.PerformanceMetrics.OrderByDescending(m => m.AuditDate).First().Id,
+                        PerformanceScore = site.PerformanceMetrics.OrderByDescending(m => m.AuditDate).First().PerformanceScore,
+                        AccessibilityScore = site.PerformanceMetrics.OrderByDescending(m => m.AuditDate).First().AccessibilityScore,
+                        BestPracticesScore = site.PerformanceMetrics.OrderByDescending(m => m.AuditDate).First().BestPracticesScore,
+                        SeoScore = site.PerformanceMetrics.OrderByDescending(m => m.AuditDate).First().SeoScore,
+                        PwaScore = site.PerformanceMetrics.OrderByDescending(m => m.AuditDate).First().PwaScore,
+                        AuditDate = site.PerformanceMetrics.OrderByDescending(m => m.AuditDate).First().AuditDate,
+                        ReportUrl = site.PerformanceMetrics.OrderByDescending(m => m.AuditDate).First().ReportUrl
                     } : null
                 };
 

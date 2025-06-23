@@ -5,8 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
-import { Bell, RefreshCw, AlertTriangle, CheckCircle, Clock, Shield } from "lucide-react";
+import { Bell, RefreshCw, AlertTriangle, CheckCircle, Clock, Shield, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { sslApi } from "@/lib/api";
 
 // Mock data for SSL certificates (temporary until backend is ready)
@@ -122,34 +124,25 @@ interface SSLSummary {
 }
 
 export function SSLExpiry() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const siteId = searchParams.get('siteId');
+  
   const [sslCertificates, setSSLCertificates] = useState<SSLCertificate[]>([]);
   const [sslSummary, setSslSummary] = useState<SSLSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [useBackendAPI, setUseBackendAPI] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  // Check authentication status
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('authToken');
-      setIsAuthenticated(!!token);
-    }
-  }, []);
+  const [focusedSite, setFocusedSite] = useState<string | null>(null);
 
   // Check if backend API is available
   const checkBackendAvailability = async () => {
     try {
-      if (!isAuthenticated) {
-        return false;
-      }
-      
       const response = await fetch('http://localhost:5000/api/ssl/summary', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         },
       });
       return response.ok;
@@ -161,14 +154,26 @@ export function SSLExpiry() {
   // Fetch SSL data from backend API
   const fetchSSLDataFromAPI = async () => {
     try {
-      if (!isAuthenticated) {
-        throw new Error('Not authenticated');
+      const token = localStorage.getItem('authToken');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
       }
 
-      const [certificates, summary] = await Promise.all([
-        sslApi.getAllSSLCertificates(),
-        sslApi.getSSLSummary()
+      const [certificatesResponse, summaryResponse] = await Promise.all([
+        fetch('http://localhost:5000/api/ssl', { headers }),
+        fetch('http://localhost:5000/api/ssl/summary', { headers })
       ]);
+
+      if (!certificatesResponse.ok || !summaryResponse.ok) {
+        throw new Error('Failed to fetch SSL data from API');
+      }
+
+      const certificates = await certificatesResponse.json();
+      const summary = await summaryResponse.json();
 
       setSSLCertificates(certificates);
       setSslSummary(summary);
@@ -181,7 +186,20 @@ export function SSLExpiry() {
 
   // Load mock data
   const loadMockData = () => {
-    setSSLCertificates(mockSSLCertificates);
+    let certificates = mockSSLCertificates;
+    
+    // If siteId is provided, filter or highlight that specific site
+    if (siteId) {
+      const siteIdNum = parseInt(siteId);
+      const targetCert = certificates.find(cert => cert.id === siteIdNum);
+      if (targetCert) {
+        setFocusedSite(targetCert.siteName || targetCert.domain);
+        // Move the focused certificate to the top
+        certificates = [targetCert, ...certificates.filter(cert => cert.id !== siteIdNum)];
+      }
+    }
+    
+    setSSLCertificates(certificates);
     setSslSummary(mockSSLSummary);
     setUseBackendAPI(false);
   };
@@ -189,17 +207,12 @@ export function SSLExpiry() {
   // Fetch SSL data on component mount
   useEffect(() => {
     fetchSSLData();
-  }, [isAuthenticated]);
+  }, [siteId]);
 
   const fetchSSLData = async () => {
     try {
       setIsLoading(true);
       setError(null);
-      
-      if (!isAuthenticated) {
-        loadMockData();
-        return;
-      }
       
       // First check if backend is available
       const backendAvailable = await checkBackendAvailability();
@@ -222,8 +235,21 @@ export function SSLExpiry() {
     try {
       setIsRefreshing(true);
       
-      if (useBackendAPI && isAuthenticated) {
-        await sslApi.checkAllSSLCertificates();
+      if (useBackendAPI) {
+        const token = localStorage.getItem('authToken');
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        
+        if (token) {
+          headers.Authorization = `Bearer ${token}`;
+        }
+
+        await fetch('http://localhost:5000/api/ssl/check-all', {
+          method: 'POST',
+          headers
+        });
+        
         await fetchSSLData(); // Refresh the data after checking
       } else {
         // Simulate refresh with mock data
@@ -239,8 +265,20 @@ export function SSLExpiry() {
 
   const handleSendAlerts = async () => {
     try {
-      if (useBackendAPI && isAuthenticated) {
-        await sslApi.sendSSLExpiryAlerts();
+      if (useBackendAPI) {
+        const token = localStorage.getItem('authToken');
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        
+        if (token) {
+          headers.Authorization = `Bearer ${token}`;
+        }
+
+        await fetch('http://localhost:5000/api/ssl/send-alerts', {
+          method: 'POST',
+          headers
+        });
       } else {
         // Simulate sending alerts with mock data
         console.log('Mock: SSL alerts sent');
@@ -289,15 +327,23 @@ export function SSLExpiry() {
 
   return (
     <div className="space-y-6">
-      {/* Authentication Status */}
-      {!isAuthenticated && (
+      {/* Navigation and Focus Indicator */}
+      {siteId && (
         <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
           <CardContent className="pt-6">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-blue-600" />
-              <p className="text-blue-800 dark:text-blue-200">
-                Please <a href="/login" className="underline font-medium">log in</a> to access real SSL certificate data from the backend API.
-              </p>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-blue-600" />
+                <p className="text-blue-800 dark:text-blue-200">
+                  {focusedSite ? `Showing SSL details for: ${focusedSite}` : `Showing SSL details for site ID: ${siteId}`}
+                </p>
+              </div>
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/manage-sites">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Manage Sites
+                </Link>
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -310,27 +356,8 @@ export function SSLExpiry() {
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-amber-600" />
               <p className="text-amber-800 dark:text-amber-200">
-                {isAuthenticated 
-                  ? "Backend API not available. Displaying mock data for demonstration."
-                  : "Displaying mock data for demonstration. Log in to access real data."
-                }
+                Backend API not available. Displaying mock data for demonstration.
               </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {error && (
-        <Card className="border-red-200 bg-red-50 dark:bg-red-950/20">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-red-600" />
-                <p className="text-red-600">{error}</p>
-              </div>
-              <Button onClick={() => setError(null)} variant="outline" size="sm">
-                Dismiss
-              </Button>
             </div>
           </CardContent>
         </Card>
@@ -459,18 +486,26 @@ export function SSLExpiry() {
         {/* Expiring Certificates */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Expiring Certificates</CardTitle>
+            <CardTitle>
+              {siteId ? `SSL Certificate Details` : 'Expiring Certificates'}
+            </CardTitle>
             <CardDescription>
-              SSL certificates requiring attention
+              {siteId ? `Certificate information for the selected site` : 'SSL certificates requiring attention'}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4 max-h-80 overflow-y-auto">
               {sslCertificates
-                .filter(cert => cert.daysRemaining <= 30)
+                .filter(cert => siteId ? true : cert.daysRemaining <= 30)
                 .sort((a, b) => a.daysRemaining - b.daysRemaining)
                 .map(cert => (
-                  <div key={cert.id} className="flex items-start justify-between p-3 rounded-lg border">
+                  <div 
+                    key={cert.id} 
+                    className={cn(
+                      "flex items-start justify-between p-3 rounded-lg border",
+                      focusedSite && cert.siteName === focusedSite && "border-blue-300 bg-blue-50 dark:bg-blue-950/20"
+                    )}
+                  >
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="font-medium">{cert.domain}</h3>
@@ -485,14 +520,17 @@ export function SSLExpiry() {
                           {cert.daysRemaining} days left
                         </Badge>
                         {cert.alertsSent && (
-                          <span title="Alerts sent">
-                            <Bell className="h-4 w-4 text-blue-500" />
-                          </span>
+                          <Bell className="h-4 w-4 text-blue-500" title="Alerts sent" />
                         )}
                       </div>
                       <p className="text-sm text-muted-foreground">
                         Expires on: {cert.expiryDate ? new Date(cert.expiryDate).toLocaleDateString() : 'Unknown'}
                       </p>
+                      {cert.issuer && (
+                        <p className="text-xs text-muted-foreground">
+                          Issued by: {cert.issuer}
+                        </p>
+                      )}
                       {cert.siteName && (
                         <p className="text-xs text-muted-foreground">
                           Site: {cert.siteName}
@@ -509,7 +547,7 @@ export function SSLExpiry() {
                   </div>
                 ))}
                 
-              {sslCertificates.filter(cert => cert.daysRemaining <= 30).length === 0 && (
+              {sslCertificates.filter(cert => siteId ? true : cert.daysRemaining <= 30).length === 0 && (
                 <div className="text-center py-8 text-muted-foreground">
                   <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500" />
                   <p>No SSL certificates expiring soon.</p>
@@ -521,70 +559,72 @@ export function SSLExpiry() {
       </div>
 
       {/* All SSL Certificates */}
-      <Card>
-        <CardHeader>
-          <CardTitle>All SSL Certificates</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4">
-            {sslCertificates.map(cert => (
-              <div 
-                key={cert.id} 
-                className={cn(
-                  "p-3 rounded-lg border flex items-center justify-between",
-                  cert.daysRemaining <= 7 && "border-red-200 bg-red-50/50 dark:bg-red-950/10",
-                  cert.daysRemaining > 7 && cert.daysRemaining <= 30 && "border-amber-200 bg-amber-50/50 dark:bg-amber-950/10"
-                )}
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-medium">{cert.domain}</h3>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        cert.status === "valid" && "text-green-600 border-green-200 bg-green-50 dark:bg-green-950/20",
-                        cert.status === "expiring" && "text-amber-600 border-amber-200 bg-amber-50 dark:bg-amber-950/20",
-                        cert.status === "critical" && "text-red-600 border-red-200 bg-red-50 dark:bg-red-950/20",
-                        cert.status === "expired" && "text-gray-600 border-gray-200 bg-gray-50 dark:bg-gray-950/20"
+      {!siteId && (
+        <Card>
+          <CardHeader>
+            <CardTitle>All SSL Certificates</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4">
+              {sslCertificates.map(cert => (
+                <div 
+                  key={cert.id} 
+                  className={cn(
+                    "p-3 rounded-lg border flex items-center justify-between",
+                    cert.daysRemaining <= 7 && "border-red-200 bg-red-50/50 dark:bg-red-950/10",
+                    cert.daysRemaining > 7 && cert.daysRemaining <= 30 && "border-amber-200 bg-amber-50/50 dark:bg-amber-950/10"
+                  )}
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-medium">{cert.domain}</h3>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          cert.status === "valid" && "text-green-600 border-green-200 bg-green-50 dark:bg-green-950/20",
+                          cert.status === "expiring" && "text-amber-600 border-amber-200 bg-amber-50 dark:bg-amber-950/20",
+                          cert.status === "critical" && "text-red-600 border-red-200 bg-red-50 dark:bg-red-950/20",
+                          cert.status === "expired" && "text-gray-600 border-gray-200 bg-gray-50 dark:bg-gray-950/20"
+                        )}
+                      >
+                        {cert.status}
+                      </Badge>
+                      {cert.alertsSent && (
+                        <Bell className="h-4 w-4 text-blue-500" title="Alerts sent" />
                       )}
-                    >
-                      {cert.status}
-                    </Badge>
-                    {cert.alertsSent && (
-                      <Bell className="h-4 w-4 text-blue-500" title="Alerts sent" />
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Expires on: {cert.expiryDate ? new Date(cert.expiryDate).toLocaleDateString() : 'Unknown'} 
+                      ({cert.daysRemaining} days remaining)
+                    </p>
+                    {cert.siteName && (
+                      <p className="text-xs text-muted-foreground">
+                        Site: {cert.siteName} • SSL ID: {cert.sslId}
+                      </p>
                     )}
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    Expires on: {cert.expiryDate ? new Date(cert.expiryDate).toLocaleDateString() : 'Unknown'} 
-                    ({cert.daysRemaining} days remaining)
-                  </p>
-                  {cert.siteName && (
-                    <p className="text-xs text-muted-foreground">
-                      Site: {cert.siteName} • SSL ID: {cert.sslId}
-                    </p>
-                  )}
+                  <div className={cn(
+                    "h-10 w-10 rounded-full flex items-center justify-center text-sm font-medium",
+                    cert.daysRemaining <= 7 ? "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400" : 
+                    cert.daysRemaining <= 30 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400" :
+                    cert.daysRemaining <= 90 ? "bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400" :
+                    "bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400"
+                  )}>
+                    {cert.daysRemaining}
+                  </div>
                 </div>
-                <div className={cn(
-                  "h-10 w-10 rounded-full flex items-center justify-center text-sm font-medium",
-                  cert.daysRemaining <= 7 ? "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400" : 
-                  cert.daysRemaining <= 30 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400" :
-                  cert.daysRemaining <= 90 ? "bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400" :
-                  "bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400"
-                )}>
-                  {cert.daysRemaining}
+              ))}
+              
+              {sslCertificates.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Shield className="h-8 w-8 mx-auto mb-2" />
+                  <p>No SSL certificates found. Add some sites to start monitoring.</p>
                 </div>
-              </div>
-            ))}
-            
-            {sslCertificates.length === 0 && (
-              <div className="text-center py-8 text-muted-foreground">
-                <Shield className="h-8 w-8 mx-auto mb-2" />
-                <p>No SSL certificates found. Add some sites to start monitoring.</p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
