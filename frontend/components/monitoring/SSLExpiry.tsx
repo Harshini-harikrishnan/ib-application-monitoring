@@ -5,11 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
-import { Bell, RefreshCw, AlertTriangle, CheckCircle, Clock, Shield, ArrowLeft } from "lucide-react";
+import { Bell, RefreshCw, AlertTriangle, CheckCircle, Clock, Shield, ArrowLeft, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { sslApi } from "@/lib/api";
 
 // Mock data for SSL certificates (temporary until backend is ready)
 const mockSSLCertificates = [
@@ -26,7 +25,8 @@ const mockSSLCertificates = [
     lastAlertSent: "2024-05-25T09:00:00Z",
     lastChecked: "2024-05-25T14:30:00Z",
     siteName: "Main Website",
-    siteUrl: "https://example.com"
+    siteUrl: "https://example.com",
+    siteId: 1
   },
   {
     id: 2,
@@ -41,7 +41,8 @@ const mockSSLCertificates = [
     lastAlertSent: "2024-05-25T09:00:00Z",
     lastChecked: "2024-05-25T14:30:00Z",
     siteName: "API Gateway",
-    siteUrl: "https://api.example.com"
+    siteUrl: "https://api.example.com",
+    siteId: 2
   },
   {
     id: 3,
@@ -56,7 +57,8 @@ const mockSSLCertificates = [
     lastAlertSent: null,
     lastChecked: "2024-05-25T14:30:00Z",
     siteName: "Customer Portal",
-    siteUrl: "https://portal.example.com"
+    siteUrl: "https://portal.example.com",
+    siteId: 3
   },
   {
     id: 4,
@@ -71,7 +73,8 @@ const mockSSLCertificates = [
     lastAlertSent: null,
     lastChecked: "2024-05-25T14:30:00Z",
     siteName: "Documentation",
-    siteUrl: "https://docs.example.com"
+    siteUrl: "https://docs.example.com",
+    siteId: 4
   },
   {
     id: 5,
@@ -86,7 +89,8 @@ const mockSSLCertificates = [
     lastAlertSent: "2024-05-25T09:00:00Z",
     lastChecked: "2024-05-25T14:30:00Z",
     siteName: "Auth Service",
-    siteUrl: "https://auth.example.com"
+    siteUrl: "https://auth.example.com",
+    siteId: 5
   }
 ];
 
@@ -113,6 +117,7 @@ interface SSLCertificate {
   lastChecked: string;
   siteName?: string;
   siteUrl?: string;
+  siteId?: number;
 }
 
 interface SSLSummary {
@@ -139,13 +144,20 @@ export function SSLExpiry() {
   // Check if backend API is available
   const checkBackendAvailability = async () => {
     try {
+      const token = localStorage.getItem('authToken');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
       const response = await fetch('http://localhost:5000/api/ssl/summary', {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
       });
-      return response.ok;
+      return response.status !== 404;
     } catch {
       return false;
     }
@@ -191,11 +203,11 @@ export function SSLExpiry() {
     // If siteId is provided, filter or highlight that specific site
     if (siteId) {
       const siteIdNum = parseInt(siteId);
-      const targetCert = certificates.find(cert => cert.id === siteIdNum);
+      const targetCert = certificates.find(cert => cert.siteId === siteIdNum);
       if (targetCert) {
         setFocusedSite(targetCert.siteName || targetCert.domain);
         // Move the focused certificate to the top
-        certificates = [targetCert, ...certificates.filter(cert => cert.id !== siteIdNum)];
+        certificates = [targetCert, ...certificates.filter(cert => cert.siteId !== siteIdNum)];
       }
     }
     
@@ -286,6 +298,11 @@ export function SSLExpiry() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send SSL alerts');
     }
+  };
+
+  const handleViewPerformance = (siteId: number) => {
+    // Navigate to performance metrics page for the specific site
+    router.push(`/monitoring/performance-metrics?siteId=${siteId}`);
   };
 
   // Prepare data for donut chart
@@ -537,12 +554,24 @@ export function SSLExpiry() {
                         </p>
                       )}
                     </div>
-                    <div className={cn(
-                      "h-10 w-10 rounded-full flex items-center justify-center text-sm font-medium",
-                      cert.daysRemaining <= 7 ? "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400" : 
-                      "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400"
-                    )}>
-                      {cert.daysRemaining}
+                    <div className="flex items-center gap-2">
+                      <div className={cn(
+                        "h-10 w-10 rounded-full flex items-center justify-center text-sm font-medium",
+                        cert.daysRemaining <= 7 ? "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400" : 
+                        "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400"
+                      )}>
+                        {cert.daysRemaining}
+                      </div>
+                      {cert.siteId && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewPerformance(cert.siteId!)}
+                          title="View Performance Metrics"
+                        >
+                          <BarChart3 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -603,14 +632,26 @@ export function SSLExpiry() {
                       </p>
                     )}
                   </div>
-                  <div className={cn(
-                    "h-10 w-10 rounded-full flex items-center justify-center text-sm font-medium",
-                    cert.daysRemaining <= 7 ? "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400" : 
-                    cert.daysRemaining <= 30 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400" :
-                    cert.daysRemaining <= 90 ? "bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400" :
-                    "bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400"
-                  )}>
-                    {cert.daysRemaining}
+                  <div className="flex items-center gap-2">
+                    <div className={cn(
+                      "h-10 w-10 rounded-full flex items-center justify-center text-sm font-medium",
+                      cert.daysRemaining <= 7 ? "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400" : 
+                      cert.daysRemaining <= 30 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400" :
+                      cert.daysRemaining <= 90 ? "bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400" :
+                      "bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400"
+                    )}>
+                      {cert.daysRemaining}
+                    </div>
+                    {cert.siteId && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewPerformance(cert.siteId!)}
+                        title="View Performance Metrics"
+                      >
+                        <BarChart3 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}

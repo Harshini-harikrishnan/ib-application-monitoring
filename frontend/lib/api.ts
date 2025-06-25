@@ -1,15 +1,17 @@
+// API service functions for SSL monitoring
+
+// Use HTTP for local development to avoid SSL certificate issues
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
+// Helper function to get auth headers
 function getAuthHeaders(): Record<string, string> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
   
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('authToken');
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
   }
   
   return headers;
@@ -18,24 +20,20 @@ function getAuthHeaders(): Record<string, string> {
 // Helper function to handle API responses
 async function handleApiResponse(response: Response) {
   if (!response.ok) {
-    const errorText = await response.text();
     let errorMessage = `HTTP error! status: ${response.status}`;
     
     try {
-      const errorData = JSON.parse(errorText);
-      errorMessage = errorData.message || errorData.title || errorMessage;
-    } catch {
-      // If not JSON, use the text as error message
-      errorMessage = errorText || errorMessage;
-    }
-    
-    if (response.status === 401) {
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('user');
-        window.location.href = '/login?message=Session expired. Please log in again.';
+      const errorText = await response.text();
+      if (errorText) {
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.message || errorData.title || errorMessage;
+        } catch {
+          errorMessage = errorText;
+        }
       }
-      throw new Error('Authentication required. Please log in.');
+    } catch {
+      // If we can't read the response, use the status
     }
     
     throw new Error(errorMessage);
@@ -49,6 +47,7 @@ async function handleApiResponse(response: Response) {
   return response.text();
 }
 
+// Sites API
 export const sitesApi = {
   async getAllSites() {
     try {
@@ -141,6 +140,7 @@ export const sitesApi = {
   },
 };
 
+// SSL API
 export const sslApi = {
   async getAllSSLCertificates() {
     try {
@@ -181,7 +181,6 @@ export const sslApi = {
   async getSSLSummary() {
     try {
       const response = await fetch(`${API_BASE_URL}/ssl/summary`, {
-        method: 'GET',
         headers: getAuthHeaders(),
       });
       return await handleApiResponse(response);
@@ -248,6 +247,7 @@ export const sslApi = {
   },
 };
 
+// Auth API
 export const authApi = {
   async login(credentials: { email: string; password: string }) {
     try {
@@ -298,12 +298,18 @@ export const authApi = {
   },
 };
 
+// Performance API (for future Lighthouse integration)
 export const performanceApi = {
   async getPerformanceMetrics(siteId: number) {
     try {
       const response = await fetch(`${API_BASE_URL}/performance/${siteId}`, {
         headers: getAuthHeaders(),
       });
+      
+      if (response.status === 404) {
+        throw new Error('No performance metrics found for this site');
+      }
+      
       return await handleApiResponse(response);
     } catch (error) {
       console.error('Error in getPerformanceMetrics:', error);
@@ -313,42 +319,14 @@ export const performanceApi = {
 
   async runLighthouseAudit(siteId: number) {
     try {
-      console.log('Running Lighthouse audit for site:', siteId);
       const response = await fetch(`${API_BASE_URL}/performance/lighthouse/${siteId}`, {
         method: 'POST',
         headers: getAuthHeaders(),
       });
-      console.log('Lighthouse audit response status:', response.status);
-      const data = await handleApiResponse(response);
-      return data.results; // Extract results from { success, message, results }
+      return await handleApiResponse(response);
     } catch (error) {
       console.error('Error in runLighthouseAudit:', error);
-      throw new Error('Failed to run Lighthouse audit. Please check the site URL and try again.');
+      throw new Error('Failed to run Lighthouse audit');
     }
   },
-
-  async downloadLighthouseReport(siteId: number) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/performance/lighthouse/report/${siteId}`, {
-        headers: getAuthHeaders(),
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to download report: ${response.statusText}`);
-      }
-      
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `lighthouse-report-${siteId}.html`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Error in downloadLighthouseReport:', error);
-      throw new Error('Failed to download Lighthouse report');
-    }
-  } 
 };

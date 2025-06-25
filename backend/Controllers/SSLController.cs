@@ -25,7 +25,7 @@ namespace WebMonitorAPI.Controllers
             _userManager = userManager;
             _logger = logger;
         }
-
+        [Authorize]
         [HttpGet]
         public async Task<ActionResult<List<SSLCertificateDto>>> GetAllSSLCertificates()
         {
@@ -33,7 +33,7 @@ namespace WebMonitorAPI.Controllers
             var certificates = await _sslMonitoringService.GetAllSSLCertificatesAsync(userId);
             return Ok(certificates);
         }
-
+        [Authorize]
         [HttpGet("expiring")]
         public async Task<ActionResult<List<SSLCertificateDto>>> GetExpiringCertificates([FromQuery] int days = 30)
         {
@@ -41,7 +41,7 @@ namespace WebMonitorAPI.Controllers
             var certificates = await _sslMonitoringService.GetExpiringCertificatesAsync(userId, days);
             return Ok(certificates);
         }
-
+        [Authorize]
         [HttpGet("{id}")]
         public async Task<ActionResult<SSLCertificateDto>> GetSSLCertificate(int id)
         {
